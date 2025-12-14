@@ -1,10 +1,26 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'node-backend'
+  # Мониторинг самого Prometheus
+  - job_name: 'prometheus'
     static_configs:
-      - targets: ['backend:5000']
+      - targets: ['localhost:9090']
+
+  # Мониторинг cAdvisor
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
+
+  # Мониторинг вашего бэкенда (добавьте эндпоинт /metrics)
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['backend:5000']  # Имя сервиса из основного docker-compose.yml
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Мониторинг хоста через node-exporter (если добавили)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
