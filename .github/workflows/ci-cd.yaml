@@ -1,0 +1,51 @@
+name: Build and Test Fullstack App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ============= Фронтенд =============
+      - name: Install and build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      # ============= Бэкенд =============
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Run backend tests (if defined)
+        run: |
+          cd backend
+          if grep -q '"test":' package.json; then
+            npm test
+          else
+            echo "No 'test' script in package.json — skipping"
+          fi
+
+      # ============= Отладка =============
+      - name: Show project structure
+        run: |
+          ls -la
+          echo "=== Frontend ==="
+          ls -la frontend/
+          echo "=== Backend ==="
+          ls -la backend/
