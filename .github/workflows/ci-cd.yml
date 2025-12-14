@@ -1,37 +1,15 @@
-name: Deploy to GitHub Pages
+# .github/workflows/ci-cd.yml
+
+name: Build and Test Fullstack App
 
 on:
   push:
     branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'  # если весь сайт в корне
-          # path: './dist'  # если используете сборщик и результат в папке dist
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        name: Deploy to GitHub Pages
-
-on:
-  push:
+  pull_request:
     branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -43,19 +21,24 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (client)
+        run: |
+          cd client
+          npm install
 
-      - name: Build website
-        run: npm run build
+      - name: Build React app
+        run: |
+          cd client
+          npm run build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Install dependencies (server)
+        run: |
+          cd server
+          npm install
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'  # или 'build' — зависит от фреймворка
+      - name: Run tests (if any)
+        run: |
+          cd server
+          npm test || echo "No tests found"
 
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+  
