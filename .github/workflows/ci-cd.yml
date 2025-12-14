@@ -1,53 +1,32 @@
-# .github/workflows/ci-cd.yml
-
-name: Build and Test Fullstack App
+name: Deploy to GitHub Pages
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  build-and-test:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          node-version: '20'
+          path: './public'  # ← ЗДЕСЬ — корень репозитория, если index.html в корне
 
-      # ============= Фронтенд (React) =============
-      - name: Install dependencies (frontend)
-        run: |
-          cd frontend
-          npm install
-
-      - name: Build React app
-        run: |
-          cd frontend
-          npm run build
-
-      # ============= Бэкенд (Express) =============
-      - name: Install dependencies (backend)
-        run: |
-          cd backend
-          npm install
-
-      - name: Run backend tests (if any)
-        run: |
-          cd backend
-          npm test || echo "No tests found — skipping"
-
-      # ============= Дополнительно: отладка (опционально) =============
-      - name: Show project structure (for verification)
-        run: |
-          ls -la
-          echo "=== Frontend directory ==="
-          ls -la frontend/
-          echo "=== Backend directory ==="
-          ls -la backend/
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
