@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: blue
+    spec:
+      containers:
+      - name: backend
+        image: yourusername/backend:latest
+        ports:
+        - containerPort: 3000

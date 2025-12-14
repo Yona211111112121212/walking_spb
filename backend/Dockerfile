@@ -13,7 +13,7 @@ RUN npm ci --only=production
 COPY . .
 
 # Открываем порт
-EXPOSE 3000
+EXPOSE 5000
 
 # Команда запуска
-CMD ["npm", "start"]
+CMD ["npm", "start", "server.js"]

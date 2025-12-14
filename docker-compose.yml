@@ -1,16 +1,37 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: walking_service_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 040506
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     build: ./backend
     ports:
-      - "3000:3000"
+      - "5000:5000"
     environment:
-      - NODE_ENV=production
-      
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: walking_service_db
+      DB_USER: postgres
+      DB_PASSWORD: 040506
+      JWT_SECRET: my_super_secret_key
+    depends_on:
+      - postgres
+
   frontend:
     build: ./frontend
     ports:
-      - "80:80"
+      - "3000:80"
     depends_on:
       - backend
+
+volumes:
+  postgres_data:

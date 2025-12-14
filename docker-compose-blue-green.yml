@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-blue-green.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend-green
+      - backend-blue
+
+  backend-blue:
+    image: yourname/walking-spb-backend:previous
+    environment: ...
+
+  backend-green:
+    image: yourname/walking-spb-backend:latest
+    environment: ...

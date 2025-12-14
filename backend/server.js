@@ -35,3 +35,20 @@ app.listen(PORT, () => {
     console.log(`✅ Сервер запущен на порту ${PORT}`);
     console.log(`📍 Маршруты доступны по адресу: http://localhost:${PORT}`);
 });
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy',
+    version: process.env.VERSION || 'unknown',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/status', (req, res) => {
+  res.json({
+    app: 'SP Project',
+    version: process.env.VERSION,
+    color: process.env.COLOR,
+    environment: process.env.NODE_ENV
+  });
+});

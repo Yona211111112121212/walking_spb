@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-green
+  labels:
+    app: walking-spb
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+      version: green
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: green
+        environment: production
+    spec:
+      containers:
+      - name: backend
+        image: node:18-alpine  # ЗДЕСЬ БУДЕТ НОВАЯ ВЕРСИЯ ВАШЕГО ПРИЛОЖЕНИЯ
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        command: ["node"]
+        args: ["server.js"]
