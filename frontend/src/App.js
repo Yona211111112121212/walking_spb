@@ -66,7 +66,7 @@ function App() {
     }
 
     return (
-        <Router>
+        <Router basename={process.env.PUBLIC_URL}>
             <div className="App">
                 <Routes>
                     <Route path="/login" element={
@@ -124,11 +124,15 @@ function App() {
                             <Navigate to="/login" />
                         )
                     } />
+                    
+                    {/* Добавьте маршрут для 404 ошибок если нужно */}
+                    <Route path="*" element={
+                        <Navigate to="/" />
+                    } />
                 </Routes>
             </div>
         </Router>
     );
 }
-
 
 export default App;

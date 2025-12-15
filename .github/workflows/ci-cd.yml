@@ -1,136 +1,244 @@
-name: Full CI/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ develop, main ]
+    branches: [ main ]
   pull_request:
-    branches: [ develop, main ]
+    branches: [ main ]
+  workflow_dispatch:  # Позволяет запускать вручную
+
+env:
+  NODE_VERSION: '18'
 
 jobs:
-  test:
+  test-backend:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: walking_service_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 040506
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     
     steps:
     - uses: actions/checkout@v3
-    
-    - name: Debug - Show directory structure
-      run: |
-        echo "📁 Current directory: $(pwd)"
-        echo "📁 All files and directories:"
-        ls -la
-        echo ""
-        echo "📁 Looking for backend folder..."
-        # Ищем папку с любым регистром
-        find . -maxdepth 1 -type d | grep -i "back" || echo "No backend folder found"
     
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: ${{ env.NODE_VERSION }}
     
-    - name: Find and install backend dependencies
+    - name: Install Backend Dependencies
       run: |
-        # Проверяем разные варианты имен
-        if [ -d "Backet" ]; then
-          echo "✅ Found Backet (with capital B)"
-          cd Backet
-        elif [ -d "backet" ]; then
-          echo "✅ Found backet (with lowercase b)"
-          cd backet
-        elif [ -d "backend" ]; then
-          echo "✅ Found backend"
-          cd backend
-        elif [ -d "BackEnd" ]; then
-          echo "✅ Found BackEnd"
-          cd BackEnd
-        else
-          echo "❌ No backend folder found!"
-          echo "Available directories:"
-          ls -d */
-          exit 1
-        fi
-        
-        echo "📦 Installing backend dependencies..."
-        npm install
-        echo "✅ Backend dependencies installed"
-        
-        echo "🧪 Testing backend files..."
-        if [ -f "server.js" ]; then
-          node -c server.js && echo "✅ server.js syntax OK"
-        else
-          echo "❌ server.js not found!"
-          ls -la
-          exit 1
-        fi
-        
+        cd backend
+        npm ci
+    
+    - name: Check Backend Syntax
+      run: |
+        cd backend
+        echo "🔍 Checking backend syntax..."
+        node -c server.js && echo "✅ server.js syntax OK"
         if [ -f "database.js" ]; then
           node -c database.js && echo "✅ database.js syntax OK"
-        else
-          echo "⚠️ database.js not found (might be OK)"
         fi
     
-    - name: Install and Build Frontend
+    - name: Test Database Connection
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_NAME: walking_service_db
+        DB_USER: postgres
+        DB_PASSWORD: 040506
+        JWT_SECRET: my_super_secret_key
       run: |
-        echo "🔍 Looking for frontend..."
-        if [ -d "frontend" ]; then
-          echo "✅ Found frontend"
-          cd frontend
-        elif [ -d "Frontend" ]; then
-          echo "✅ Found Frontend"
-          cd Frontend
-        elif [ -d "FrontEnd" ]; then
-          echo "✅ Found FrontEnd"
-          cd FrontEnd
+        cd backend
+        echo "🧪 Testing database connection..."
+        
+        cat > test-db.js << 'EOF'
+        const { Pool } = require('pg');
+        
+        const pool = new Pool({
+          host: process.env.DB_HOST,
+          port: process.env.DB_PORT,
+          database: process.env.DB_NAME,
+          user: process.env.DB_USER,
+          password: process.env.DB_PASSWORD
+        });
+        
+        pool.query('SELECT NOW() as time')
+          .then(result => {
+            console.log('✅ Database connected! Time:', result.rows[0].time);
+            process.exit(0);
+          })
+          .catch(error => {
+            console.error('❌ Database error:', error.message);
+            process.exit(1);
+          })
+          .finally(() => pool.end());
+        EOF
+        
+        node test-db.js
+    
+    - name: Test Server Startup
+      env:
+        JWT_SECRET: my_super_secret_key
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_NAME: walking_service_db
+        DB_USER: postgres
+        DB_PASSWORD: 040506
+        PORT: 5000
+      run: |
+        cd backend
+        echo "🚀 Testing server startup..."
+        
+        # Создаем временный .env файл
+        echo "JWT_SECRET=my_super_secret_key" > .env.test
+        echo "DB_HOST=localhost" >> .env.test
+        echo "DB_PORT=5432" >> .env.test
+        echo "DB_NAME=walking_service_db" >> .env.test
+        echo "DB_USER=postgres" >> .env.test
+        echo "DB_PASSWORD=040506" >> .env.test
+        echo "PORT=5000" >> .env.test
+        
+        # Экспортируем переменные
+        export $(grep -v '^#' .env.test | xargs)
+        
+        # Запускаем сервер в фоне
+        node server.js &
+        SERVER_PID=$!
+        
+        # Ждем 3 секунды
+        sleep 3
+        
+        if ps -p $SERVER_PID > /dev/null; then
+          echo "✅ Server started successfully (PID: $SERVER_PID)"
+          kill $SERVER_PID 2>/dev/null || true
         else
-          echo "⚠️ No frontend folder found, skipping"
-          exit 0
+          echo "❌ Server failed to start"
+          exit 1
         fi
-        
-        echo "📦 Installing frontend dependencies..."
-        npm install
-        echo "✅ Frontend dependencies installed"
-        
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm ci
+    
+    - name: Check Frontend Syntax
+      run: |
+        cd frontend
+        echo "🔍 Checking frontend syntax..."
+        if [ -f "src/App.js" ]; then
+          node -c src/App.js && echo "✅ App.js syntax OK"
+        fi
+        if [ -f "src/index.js" ]; then
+          node -c src/index.js && echo "✅ index.js syntax OK"
+        fi
+    
+    - name: Build Frontend
+      run: |
+        cd frontend
         echo "🏗️ Building frontend..."
-        CI=false npm run build || echo "⚠️ Build may have warnings"
+        CI=false npm run build
         
-        if [ -d "build" ] || [ -d "dist" ]; then
-          echo "✅ Frontend build successful"
+        if [ -d "build" ]; then
+          echo "✅ Build created in frontend/build/"
+          ls -la build/
+        elif [ -d "dist" ]; then
+          echo "✅ Build created in frontend/dist/"
+          ls -la dist/
         else
-          echo "⚠️ Build output not found"
+          echo "❌ No build directory created"
+          exit 1
         fi
 
-  deploy-staging:
-    needs: test
-    if: github.ref == 'refs/heads/develop'
+  deploy:
+    needs: [test-backend, test-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    environment: staging
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
     - uses: actions/checkout@v3
     
-    - name: Deploy to Staging
-      run: |
-        echo "🚀 Deploying to staging environment..."
-        echo "Branch: ${{ github.ref }}"
-        echo "This is where you would add deployment commands"
-
-  deploy-production:
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: production
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
     
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Deploy to Production
+    - name: Build Frontend for Deployment
       run: |
-        echo "🚀 Deploying to production..."
-        echo "Branch: ${{ github.ref }}"
-        echo "Commit: ${{ github.sha }}"
-        echo "This is where you would add production deployment commands"
-
-    - name: Send Deployment Notification
+        cd frontend
+        npm ci
+        CI=false npm run build
+        
+        # Создаем необходимые файлы для GitHub Pages
+        touch build/.nojekyll  # Отключаем Jekyll обработку
+        
+        # Если используете React Router
+        cp build/index.html build/404.html
+        
+        echo "📊 Build information:"
+        echo "- Files in build/:"
+        ls -la build/
+        echo "- Total size:"
+        du -sh build/
+    
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+    
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: './frontend/build'
+    
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+    
+    - name: Show Deployment Info
       if: success()
       run: |
-        echo "🎉 Production deployment successful!"
+        echo "🎉 ==========================================="
+        echo "🎉 DEPLOYMENT SUCCESSFUL!"
+        echo "🎉 ==========================================="
+        echo ""
+        echo "🌐 Your site is now live at:"
+        echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+        echo ""
+        echo "📊 Deployment details:"
+        echo "   - Branch: ${{ github.ref }}"
+        echo "   - Commit: ${{ github.sha }}"
+        echo "   - Time: $(date)"
+        echo ""
+        echo "🔗 Click the 'github-pages' environment link above"
+        echo "   to visit your site directly from GitHub!"
+        echo ""
+        echo "🔄 Next update: Push to main branch"
