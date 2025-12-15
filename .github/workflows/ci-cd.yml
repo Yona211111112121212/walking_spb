@@ -191,3 +191,73 @@ jobs:
         echo "- $(date)"
         echo "- Branch: ${{ github.ref }}"
         echo "- Commit: ${{ github.sha }}"
+        name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install Backend Dependencies
+      run: |
+        cd Backet
+        npm install
+    
+    - name: Check Backend Syntax
+      run: |
+        cd Backet
+        node -c server.js
+        echo "✅ Backend syntax OK"
+    
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm install
+    
+    - name: Build Frontend
+      run: |
+        cd frontend
+        CI=false npm run build
+        echo "✅ Frontend built"
+
+  deploy:
+    needs: test  # Ждем завершения тестов
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Build Frontend for Deployment
+      run: |
+        cd frontend
+        npm install
+        CI=false npm run build
+    
+    - name: Deploy to GitHub Pages
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        folder: frontend/build  # или frontend/dist в зависимости от структуры
+        branch: gh-pages  # Ветка для GitHub Pages
+        clean: true
