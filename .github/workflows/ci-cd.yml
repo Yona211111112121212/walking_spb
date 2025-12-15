@@ -1,131 +1,71 @@
-name: CI/CD Pipeline
+name: Deploy React App to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:  # Позволяет запускать вручную
+    branches: [main]
 
-env:
-  NODE_VERSION: '18'
+permissions:
+  pages: write
+  id-token: write
 
 jobs:
-  test-backend:
+  build:
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_DB: walking_service_db
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: 040506
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-    
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ env.NODE_VERSION }}
+        node-version: '18'
     
-    - name: Install Backend Dependencies
+    - name: Install dependencies
       run: |
-        echo "📦 Installing backend dependencies..."
-        cd backend
-        npm install --no-audit
-    
-    - name: Test Backend Database Connection
-      env:
-        DB_HOST: localhost
-        DB_PORT: 5432
-        DB_NAME: walking_service_db
-        DB_USER: postgres
-        DB_PASSWORD: 040506
-        JWT_SECRET: my_super_secret_key
-      run: |
-        echo "🧪 Testing database connection..."
-        cd backend
-        
-        cat > test-db.js << 'EOF'
-        console.log("Testing database connection...");
-        try {
-          const pg = require('pg');
-          console.log("✅ PostgreSQL module loaded successfully");
-          process.exit(0);
-        } catch (error) {
-          console.error("❌ Error loading pg module:", error.message);
-          process.exit(1);
-        }
-        EOF
-        
-        node test-db.js
-
-  build-and-deploy-frontend:
-    # Этот job будет собирать и загружать артефакт
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-    
-    - name: Install Dependencies
-      run: |
-        echo "📦 Installing frontend dependencies..."
         cd frontend
         npm install --no-audit
+        echo "✅ Зависимости установлены"
     
-    - name: Build Frontend
+    - name: Build React app
       run: |
-        echo "🏗️ Building frontend..."
         cd frontend
-        CI=false npm run build
         
-        # Критически важные файлы для GitHub Pages
+        echo "🏗️ Запускаем сборку..."
+        npm run build
+        
+        # ОБЯЗАТЕЛЬНЫЕ файлы для GitHub Pages
+        echo "📄 Создаём .nojekyll и 404.html..."
         touch build/.nojekyll
         cp build/index.html build/404.html
         
-        echo "✅ Build completed. Contents of build/:"
-        ls -la build/
+        # Критическая проверка
+        echo "🔍 Проверяем результат сборки:"
+        if [ -f "build/index.html" ]; then
+          echo "✅ index.html создан"
+          echo "📦 Содержимое папки build:"
+          ls -la build/
+        else
+          echo "❌ ОШИБКА: index.html не найден!"
+          echo "Содержимое папки:"
+          ls -la
+          exit 1
+        fi
     
-    - name: Upload Artifact for GitHub Pages
-      # Шаг ЗАГРУЗКИ артефакта. Должен быть в ЭТОМ ЖЕ job, где была сборка.
+    - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
+        # ТОЧНЫЙ путь: frontend/build
         path: './frontend/build'
 
-  deploy-to-github-pages:
-    # Этот job ЗАВИСИТ от job с артефактом и занимается только деплоем
-    needs: build-and-deploy-frontend
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+  deploy:
+    needs: build
     runs-on: ubuntu-latest
-    
-    # ОБЯЗАТЕЛЬНЫЕ разрешения для работы с GitHub Pages
-    permissions:
-      pages: write      # Дает доступ к настройкам Pages
-      id-token: write   # Нужно для аутентификации развертывания
-    
-    # Связь с окружением GitHub Pages (появится ссылка в интерфейсе репозитория)
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        # Шаг РАЗВЕРТЫВАНИЯ. Находит артефакт, загруженный в предыдущем job.
-        uses: actions/deploy-pages@v4
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
