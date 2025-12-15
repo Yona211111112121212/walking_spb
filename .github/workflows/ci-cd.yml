@@ -14,9 +14,9 @@ jobs:
       postgres:
         image: postgres:14
         env:
-          POSTGRES_DB: walking_service_db_test
+          POSTGRES_DB: walking_service_db
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: test_password
+          POSTGRES_PASSWORD: 040506
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -47,10 +47,10 @@ jobs:
       env:
         DB_HOST: localhost
         DB_PORT: 5432
-        DB_NAME: walking_service_db_test
+        DB_NAME: walking_service_db
         DB_USER: postgres
-        DB_PASSWORD: test_password
-        JWT_SECRET: test_secret_key
+        DB_PASSWORD: 040506
+        JWT_SECRET: my_super_secret_key
         NODE_ENV: test
       run: |
         if [ -d "Backet" ]; then
