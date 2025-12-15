@@ -5,12 +5,10 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Для ручного запуска
+  workflow_dispatch:  # Позволяет запускать вручную
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+env:
+  NODE_VERSION: '18'
 
 jobs:
   test-backend:
@@ -32,12 +30,12 @@ jobs:
           - 5432:5432
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: ${{ env.NODE_VERSION }}
     
     - name: Install Backend Dependencies
       run: |
@@ -57,11 +55,8 @@ jobs:
         echo "🧪 Testing database connection..."
         cd backend
         
-        # Создаем простой тест
         cat > test-db.js << 'EOF'
         console.log("Testing database connection...");
-        
-        // Просто проверяем, что можем подключиться к pg
         try {
           const pg = require('pg');
           console.log("✅ PostgreSQL module loaded successfully");
@@ -73,36 +68,22 @@ jobs:
         EOF
         
         node test-db.js
-    
-    - name: Check Backend Server File
-      run: |
-        echo "🔍 Checking backend server.js..."
-        cd backend
-        
-        if [ -f "server.js" ]; then
-          echo "✅ server.js found"
-          # Простая проверка, что файл существует и не пустой
-          if [ -s "server.js" ]; then
-            echo "✅ server.js is not empty"
-            head -5 server.js
-          fi
-        else
-          echo "❌ server.js not found"
-          exit 1
-        fi
 
-  build-frontend:
+  build-and-deploy-frontend:
+    # Этот job будет собирать и загружать артефакт
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: ${{ env.NODE_VERSION }}
     
-    - name: Install Frontend Dependencies
+    - name: Install Dependencies
       run: |
         echo "📦 Installing frontend dependencies..."
         cd frontend
@@ -112,86 +93,39 @@ jobs:
       run: |
         echo "🏗️ Building frontend..."
         cd frontend
+        CI=false npm run build
         
-        # Устанавливаем переменную окружения для React
-        export CI=false
+        # Критически важные файлы для GitHub Pages
+        touch build/.nojekyll
+        cp build/index.html build/404.html
         
-        # Пытаемся собрать проект
-        npm run build
-        
-        # Проверяем результат сборки
-        if [ -d "build" ]; then
-          echo "✅ Build directory created successfully"
-          echo "📁 Contents of build directory:"
-          ls -la build/
-          echo "📊 Total size:"
-          du -sh build/
-        else
-          echo "❌ Build directory not created!"
-          exit 1
-        fi
+        echo "✅ Build completed. Contents of build/:"
+        ls -la build/
+    
+    - name: Upload Artifact for GitHub Pages
+      # Шаг ЗАГРУЗКИ артефакта. Должен быть в ЭТОМ ЖЕ job, где была сборка.
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './frontend/build'
 
-  deploy:
-    needs: [test-backend, build-frontend]
+  deploy-to-github-pages:
+    # Этот job ЗАВИСИТ от job с артефактом и занимается только деплоем
+    needs: build-and-deploy-frontend
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     
+    # ОБЯЗАТЕЛЬНЫЕ разрешения для работы с GitHub Pages
+    permissions:
+      pages: write      # Дает доступ к настройкам Pages
+      id-token: write   # Нужно для аутентификации развертывания
+    
+    # Связь с окружением GitHub Pages (появится ссылка в интерфейсе репозитория)
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-    
-    - name: Install and Build
-      run: |
-        echo "🔧 Preparing for deployment..."
-        cd frontend
-        
-        # Устанавливаем зависимости
-        npm install --no-audit
-        
-        # Собираем проект
-        CI=false npm run build
-        
-        # Создаем необходимые файлы для GitHub Pages
-        echo "Creating .nojekyll file..."
-        touch build/.nojekyll
-        
-        echo "Creating 404.html for React Router..."
-        cp build/index.html build/404.html
-        
-        echo "✅ Build completed"
-    
-    - name: Setup Pages
-      uses: actions/configure-pages@v3
-    
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v4
-      with:
-        path: './frontend/build'
-    
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v2
-    
-    - name: Deployment Success Message
-      run: |
-        echo "🎉 ==========================================="
-        echo "🎉 DEPLOYMENT SUCCESSFUL!"
-        echo "🎉 ==========================================="
-        echo ""
-        echo "🌐 Your site is now live at:"
-        echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
-        echo ""
-        echo "📊 Details:"
-        echo "   - Branch: ${{ github.ref }}"
-        echo "   - Commit: ${{ github.sha }}"
-        echo "   - Time: $(date)"
-        echo ""
-        echo "🔗 You can also find the link in the 'github-pages' environment above"
+      - name: Deploy to GitHub Pages
+        id: deployment
+        # Шаг РАЗВЕРТЫВАНИЯ. Находит артефакт, загруженный в предыдущем job.
+        uses: actions/deploy-pages@v4
